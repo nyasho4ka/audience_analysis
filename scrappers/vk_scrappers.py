@@ -1,6 +1,11 @@
+import pandas as pd
+import numpy as np
 from typing import Optional
 
-from models import UserInfo, GroupInfo
+from models import (
+    UserInfo, GroupInfo, GeneralGroupInfo,
+    DiscussionsGroupInfo, MembersGroupInfo,
+)
 
 USER_INFO_FIELDS = [
     'photo_id',
@@ -111,38 +116,113 @@ class VkUserInfoScrapper(VkInfoScrapper):
 
         return self._vk_api.users.get(user_ids=self._user_ids, fields=requested_fields)
 
-    def _get_groups_info(self) -> list:  # TODO IMPLEMENT
-        # return self._vk_api.groups.get(user_id=self._user_id, offset=0)
-        return [None] * len(self._user_ids)
+    def _get_groups_info(self) -> list:
+        users_groups_info = []
+        requested_fields = ('members_count', 'activity', 'age_limits', 'city')
+        headers = ('id', 'name', 'screen_name', 'is_closed', 'type', 'members_count', 'activity', 'age_limits', 'city')
+        for user_id in self._user_ids:
+            groups_count = self._vk_api.groups.get(user_id=user_id, count=1)['count']
+            offsets = [1000 * i for i in range(groups_count // 1000 + 1)]
 
-    def _get_audio_info(self) -> list:  # TODO IMPLEMENT
-        #         try:
-        #             return self._vk_audio_api.get(owner_id=self._user_id)
-        #         except Exception as e:
-        #             print(f"Execption occured while getting audio -> {e}")
-        #             return {}
-        return [None] * len(self._user_ids)
+            user_group_info = []
+
+            for offset in offsets:
+                group_info = self._vk_api.groups.get(
+                    user_id=user_id, offset=offset, extended=1, fields=requested_fields
+                )
+                user_group_info.extend(group_info)
+            df = pd.DataFrame(np.array(user_group_info), columns=headers)
+            users_groups_info.append(df.shape)
+            df.to_csv(f'group_data/{user_id}_group.csv')
+
+        return users_groups_info
+
+    def _get_audio_info(self) -> list:
+        users_audio_info = []
+        headers = ('id', 'artist', 'title', 'duration', 'owner_id')
+        for user_id in self._user_ids:
+            try:
+                user_tracks = self._vk_audio_api.get(owner_id=user_id)
+            except Exception as e:
+                print(f"Execption occured while getting audio -> {e}")
+                users_audio_info.append([])
+            else:
+                table = []
+                for user_track in user_tracks:
+                    table.append([
+                        user_track['id'],
+                        user_track['artist'],
+                        user_track['title'],
+                        user_track['duration'],
+                        user_track['owner_id'],
+                    ])
+                df = pd.DataFrame(np.array(table), columns=headers)
+                users_audio_info.append(df.shape[0])
+                df.to_csv(f'audio_data/{user_id}_audio.csv')
+
+        return users_audio_info
 
 
 class VkGroupInfoScrapper(VkInfoScrapper):
-    def __init__(self, *args):
+    def __init__(self, *args, group_id: Optional[str] = None):
         super().__init__(*args)
-        self._group_id: int = None
+        self._group_id: Optional[str] = group_id
+        self._current_group: Optional[GroupInfo] = None
+        self._set_current_group()
 
-    def get_info(self, group_id: int, is_full: bool, fields: list, offset: int) -> 'GroupInfo':
+    def set_group_by_id(self, group_id: str):
         self._group_id = group_id
-        group_info = GroupInfo(
-            general_info=self._get_general_info(is_full=is_full, fields=fields),
-            discussions_info=self._get_discussions_info(),
-            members_info=self._get_members_info(offset=offset),
-        )
-        return group_info
+        self._set_current_group()
 
-    def _get_general_info(self, is_full: bool, fields: list) -> dict:
-        pass
+    def _set_current_group(self):
+        if not self._group_id:
+            return
+        self._current_group = GroupInfo()
 
-    def _get_discussions_info(self):
-        pass
+    def get_info(self, is_full: bool, fields: list, offset: int) -> GroupInfo:
+        if not self._group_id:
+            raise AttributeError("Group Id is not defined for the group scrapper")
 
-    def _get_members_info(self, offset: int) -> dict:
-        return self._vk_api.groups.getMembers(group_id=self._group_id, offset=offset)
+        self.get_general_info(is_full=is_full, fields=fields)
+        self.get_discussions_info()
+        self.get_members_info(offset=offset)
+        return self._current_group
+
+    def get_general_info(self, is_full: bool, fields: list) -> GeneralGroupInfo:
+        if not self._group_id:
+            raise AttributeError("Group Id is not defined for the group scrapper")
+
+        if not self._current_group.general_info:
+            if bool(is_full) and bool(fields):
+                raise AttributeError("You should choose one of the params (is_full, fields) not both")
+
+            if is_full:
+                requested_fields = GROUP_INFO_FIELDS
+            else:
+                requested_fields = fields
+
+            self._current_group.general_info = GeneralGroupInfo(
+                self._vk_api.groups.getById(group_id=self._group_id, fields=requested_fields)
+            )
+
+        return self._current_group.general_info
+
+    def get_discussions_info(self) -> DiscussionsGroupInfo:
+        if not self._group_id:
+            raise AttributeError("Group Id is not defined for the group scrapper")
+
+        if not self._current_group.discussions_info:
+            self._current_group.discussions_info = DiscussionsGroupInfo()
+
+        return self._current_group.discussions_info
+
+    def get_members_info(self, offset: int) -> MembersGroupInfo:
+        if not self._group_id:
+            raise AttributeError("Group Id is not defined for the group scrapper")
+
+        if not self._current_group.members_info:
+            self._current_group.members_info = MembersGroupInfo(
+                self._vk_api.groups.getMembers(group_id=self._group_id, offset=offset)
+            )
+
+        return self._current_group.members_info

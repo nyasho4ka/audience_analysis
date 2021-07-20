@@ -30,13 +30,13 @@ class VkProcessor(object):
         users_info = self._vk_user_info_scrapper.get_info(user_ids, is_full=is_full, fields=fields)
         return users_info
 
-    def get_group_info(self, group_id: int, is_full: bool = None, fields: list = None, offset: int = 0) -> 'GroupInfo':
+    def get_group_info(self, is_full: bool = None, fields: list = None, offset: int = 0) -> 'GroupInfo':
         if is_full and fields:
             raise AttributeError("You can use is_full or fields param not both")
-        return self._vk_group_info_scrapper.get_info(group_id=group_id, is_full=is_full, fields=fields, offset=offset)
-
-    def get_groups_info(self, group_ids: list, is_full: bool = None, fields: list = None) -> list:
-        groups_info = []
-        for group_id in group_ids:
-            groups_info.append(self.get_group_info(group_id, is_full=is_full, fields=fields))
-        return groups_info
+        return self._vk_group_info_scrapper.get_info(is_full=is_full, fields=fields, offset=offset)
+    #
+    # def get_groups_info(self, group_ids: list, is_full: bool = None, fields: list = None) -> list:
+    #     groups_info = []
+    #     for group_id in group_ids:
+    #         groups_info.append(self.get_group_info(group_id, is_full=is_full, fields=fields))
+    #     return groups_info

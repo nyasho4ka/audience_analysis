@@ -1,1 +1,7 @@
-from .models import UserInfo, GroupInfo
+from .models import (
+    UserInfo,
+    GroupInfo,
+    GeneralGroupInfo,
+    DiscussionsGroupInfo,
+    MembersGroupInfo,
+)
