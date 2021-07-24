@@ -1,5 +1,6 @@
 import argparse
 import time
+import os
 from multiprocessing import Pool
 
 import pandas as pd
@@ -10,13 +11,15 @@ from utils import get_phone_and_password, get_required_table_fields
 
 
 def worker(group_id_, offset_, user_fields_):
+    worker_id = os.getpid()
+
     vk_processor_ = VkProcessor(*get_phone_and_password())
     vk_processor_._vk_group_info_scrapper.set_group_by_id(group_id=group_id_)
 
     group_info: GroupInfo = vk_processor_.get_group_info(offset=offset_)
 
     user_data = []
-    user_ids = group_info.members_info.user_ids[:100]
+    user_ids = group_info.members_info.user_ids
     users_info = vk_processor_.get_user_info(user_ids, is_full=True)
 
     for user_info in users_info:
@@ -30,6 +33,9 @@ def worker(group_id_, offset_, user_fields_):
         user_data.append(user_list)
 
     pd.DataFrame(np.array(user_data), columns=user_fields_).to_csv(f'result_{offset_}_{offset_ + 1000}.csv')
+
+    print(f'WORKER_ID={worker_id} - FINISH')
+    return 'ok'
 
 
 if __name__ == '__main__':
@@ -46,7 +52,7 @@ if __name__ == '__main__':
 
     with Pool(processes=4) as pool:
         async_results = []
-        for offset in range(0, 4000, 1000):
+        for offset in range(0, 10000, 1000):
             async_result = pool.apply_async(
                 func=worker,
                 args=(group_id, offset, user_fields)

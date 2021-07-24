@@ -1,0 +1,5 @@
+.ipynb_checkpoints/
+*.csv
+config.json
+vk_config.v2.json
+__pycache__

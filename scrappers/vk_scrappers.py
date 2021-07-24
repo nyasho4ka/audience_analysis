@@ -1,6 +1,9 @@
+import time
 import pandas as pd
 import numpy as np
 from typing import Optional
+
+from vk_api.exceptions import VkApiError
 
 from models import (
     UserInfo, GroupInfo, GeneralGroupInfo,
@@ -121,19 +124,32 @@ class VkUserInfoScrapper(VkInfoScrapper):
         requested_fields = ('members_count', 'activity', 'age_limits', 'city')
         headers = ('id', 'name', 'screen_name', 'is_closed', 'type', 'members_count', 'activity', 'age_limits', 'city')
         for user_id in self._user_ids:
-            groups_count = self._vk_api.groups.get(user_id=user_id, count=1)['count']
-            offsets = [1000 * i for i in range(groups_count // 1000 + 1)]
+            start_time = time.time()
+            try:
+                groups_count = self._vk_api.groups.get(user_id=user_id, count=1)['count']
+            except VkApiError:
+                users_groups_info.append((0, 0))
+                print(f'User {user_id} was deleted or banned')
+            else:
+                offsets = [1000 * i for i in range(groups_count // 1000 + 1)]
 
-            user_group_info = []
+                user_group_info = []
 
-            for offset in offsets:
-                group_info = self._vk_api.groups.get(
-                    user_id=user_id, offset=offset, extended=1, fields=requested_fields
-                )
-                user_group_info.extend(group_info)
-            df = pd.DataFrame(np.array(user_group_info), columns=headers)
-            users_groups_info.append(df.shape)
-            df.to_csv(f'group_data/{user_id}_group.csv')
+                for offset in offsets:
+                    group_info = self._vk_api.groups.get(
+                        user_id=user_id, offset=offset, extended=1, fields=requested_fields
+                    )
+                    user_group_info.extend(group_info['items'])
+                if len(user_group_info) > 0:
+                    df = pd.DataFrame(user_group_info, columns=headers)
+                    users_groups_info.append(df.shape)
+                    df.to_csv(f'group_data/{user_id}_group.csv')
+                else:
+                    users_groups_info.append((0, 0))
+
+            process_time = time.time() - start_time
+            if process_time < 0.6:
+                time.sleep(0.6 - process_time)
 
         return users_groups_info
 
@@ -147,18 +163,12 @@ class VkUserInfoScrapper(VkInfoScrapper):
                 print(f"Execption occured while getting audio -> {e}")
                 users_audio_info.append([])
             else:
-                table = []
-                for user_track in user_tracks:
-                    table.append([
-                        user_track['id'],
-                        user_track['artist'],
-                        user_track['title'],
-                        user_track['duration'],
-                        user_track['owner_id'],
-                    ])
-                df = pd.DataFrame(np.array(table), columns=headers)
-                users_audio_info.append(df.shape[0])
-                df.to_csv(f'audio_data/{user_id}_audio.csv')
+                if len(user_tracks) > 0:
+                    df = pd.DataFrame(user_tracks, columns=headers)
+                    users_audio_info.append(df.shape[0])
+                    df.to_csv(f'audio_data/{user_id}_audio.csv')
+                else:
+                    users_audio_info.append((0, 0))
 
         return users_audio_info
 
@@ -222,7 +232,7 @@ class VkGroupInfoScrapper(VkInfoScrapper):
 
         if not self._current_group.members_info:
             self._current_group.members_info = MembersGroupInfo(
-                self._vk_api.groups.getMembers(group_id=self._group_id, offset=offset)
+                self._vk_api.groups.getMembers(group_id=self._group_id, offset=offset, sort='id_desc')
             )
 
         return self._current_group.members_info
