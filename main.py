@@ -37,7 +37,7 @@ def group_process_worker(group_id_, offset_, user_fields_):
 
         user_data.append(user_list)
 
-    pd.DataFrame(np.array(user_data), columns=user_fields_).to_csv(f'result_{offset_}_{offset_ + 1000}.csv')
+    pd.DataFrame(np.array(user_data), columns=user_fields_).to_csv(f'result_data/result_{offset_}_{offset_ + 1000}.csv')
 
     print(f'WORKER_ID={worker_id} - FINISH')
     return 0
@@ -91,6 +91,7 @@ def get_all_artists_info(all_unique_artists):
     # Get all artists meta info
     # return it and create dataframe
     return []
+
 
 def process_audio():
     all_unique_artists = get_all_unique_artists()
