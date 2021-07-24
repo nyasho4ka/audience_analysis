@@ -5,7 +5,7 @@ from multiprocessing import Pool
 
 import pandas as pd
 import numpy as np
-from models import GroupInfo
+from models import GroupInfo, MembersGroupInfo
 from processor import VkProcessor
 from utils import get_phone_and_password, get_required_table_fields
 
@@ -14,13 +14,13 @@ def worker(group_id_, offset_, user_fields_):
     worker_id = os.getpid()
 
     vk_processor_ = VkProcessor(*get_phone_and_password())
-    vk_processor_._vk_group_info_scrapper.set_group_by_id(group_id=group_id_)
+    vk_processor_.set_group_by_id(group_id=group_id_)
 
-    group_info: GroupInfo = vk_processor_.get_group_info(offset=offset_)
+    members_group_info: MembersGroupInfo = vk_processor_.get_members_group_info(offset=offset_)
 
     user_data = []
-    user_ids = group_info.members_info.user_ids
-    users_info = vk_processor_.get_user_info(user_ids, is_full=True)
+    user_ids = members_group_info.user_ids
+    users_info = vk_processor_.get_users_info(user_ids, is_full=True)
 
     for user_info in users_info:
         user_list = []

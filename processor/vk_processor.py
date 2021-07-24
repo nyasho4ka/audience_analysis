@@ -22,11 +22,7 @@ class VkProcessor(object):
         vk_session.auth()
         return vk_session
 
-    def get_user_info(self, user_ids: list, is_full: bool = None, fields: list = None) -> 'UserInfo':
-        users_info = self._vk_user_info_scrapper.get_info(user_ids, is_full=is_full, fields=fields)
-        return users_info
-
-    def get_users_info(self, user_ids: list, is_full: bool = None, fields: list = None) -> list:
+    def get_users_info(self, user_ids: list, is_full: bool = None, fields: list = None) -> 'UserInfo':
         users_info = self._vk_user_info_scrapper.get_info(user_ids, is_full=is_full, fields=fields)
         return users_info
 
@@ -34,9 +30,15 @@ class VkProcessor(object):
         if is_full and fields:
             raise AttributeError("You can use is_full or fields param not both")
         return self._vk_group_info_scrapper.get_info(is_full=is_full, fields=fields, offset=offset)
-    #
-    # def get_groups_info(self, group_ids: list, is_full: bool = None, fields: list = None) -> list:
-    #     groups_info = []
-    #     for group_id in group_ids:
-    #         groups_info.append(self.get_group_info(group_id, is_full=is_full, fields=fields))
-    #     return groups_info
+
+    def get_general_group_info(self, is_full: bool, fields: list):
+        return self._vk_group_info_scrapper.get_general_info(is_full=is_full, fields=fields)
+
+    def get_members_group_info(self, offset: int):
+        return self._vk_group_info_scrapper.get_members_info(offset=offset)
+
+    def get_discussions_group_info(self):
+        return self._vk_group_info_scrapper.get_discussions_info()
+
+    def set_group_by_id(self, group_id: str):
+        self._vk_group_info_scrapper.set_group_by_id(group_id=group_id)
