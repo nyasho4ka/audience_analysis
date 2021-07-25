@@ -125,7 +125,7 @@ def get_artists_data_by_id(sp):
         for i in range(0, len(artists_ids_list), step):
             async_result = pool.apply_async(
                 sp.artists,
-                args=artists_ids_list[i:i+step]
+                args=(artists_ids_list[i:i+step], )
             )
             async_results.append(async_result)
 
