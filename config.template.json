@@ -1,0 +1,17 @@
+{
+  "vk": {
+    "credentials": {
+      "phone": "<phone>",
+      "password": "<pwd>"
+    }
+  },
+  "spotify": {
+    "credentials": {
+      "client_id": "<client_id>",
+      "client_secret": "<client_secret>"
+    }
+  },
+  "csv_processing": {
+    "fields": ["first_name", "last_name", "sex", "bdate"]
+  }
+}
