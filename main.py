@@ -44,7 +44,7 @@ def group_process_worker(group_id_, offset_, user_fields_):
 
 
 def process_group(group_id: str, user_fields: list):
-    with Pool(processes=4) as pool:
+    with Pool(processes=os.cpu_count() if os.cpu_count() else 4) as pool:
         async_results = []
         for offset in range(0, 10000, 1000):  # TODO make number of people configurable
             async_result = pool.apply_async(
@@ -65,38 +65,89 @@ def audio_process_worker(audio_files):
     So we can just process them in parallel
     :return:
     """
-    audio_dfs = pd.concat((pd.read_csv(f'audio_data/{audio_file}' for audio_file in audio_files)))
-    return audio_dfs['artist'].str.split(', | feat. ', expand=True, n=1)[0].unique()
+    final_df = pd.concat([pd.read_csv(f'audio_data/{audio_file}') for audio_file in audio_files])
+    return set(final_df['artist'].unique())  # VANILLA VERSION OF GETTING ARTISTS
 
 
-def get_all_unique_artists():
-    audio_files = (filename for filename in os.listdir('audio_data') if '.csv' in filename)
-    audio_chunks = np.array_split(audio_files, os.cpu_count())
-    with Pool(processes=os.cpu_count()) as pool:
+def get_all_unique_artists_from_dataset():
+    audio_files = [filename for filename in os.listdir('audio_data') if '.csv' in filename]
+    audio_chunks = np.array_split(audio_files, 4)
+    with Pool(processes=os.cpu_count() if os.cpu_count() < 4 else 4) as pool:
         async_results = []
-        for audio_chunk in audio_chunks:
-            async_results.append(pool.apply_async(
+        for i, audio_chunk in enumerate(audio_chunks, 1):
+            async_result = pool.apply_async(
                 audio_process_worker,
                 args=(audio_chunk,)
-            ))
+            )
+            async_results.append(async_result)
+
+        return set().union(*[async_result.get() for async_result in async_results])
+
+
+def get_artists_ids(sp, all_unique_artists):
+    artist_ids = set()
+    print("Start getting artists' ids")
+    # artist_row variable may contain several artists
+    # (ex. PORCHY, MAY WAVE$, JEEMBO, LOQIEMEAN, THOMAS MRAZ, TVETH, SOULOUD, MARKUL, OXXXYMIRON)
+    unique_artists_number = len(all_unique_artists)
+    for i, artist_row in enumerate(all_unique_artists, 1):
+        items = sp.search(q=artist_row, limit=1)['tracks']['items']
+        if len(items) > 0:
+            artists = items[0]['artists']
+            for artist in artists:
+                artist_ids.add(artist['id'])
+        print(f'Progress: {round(i / unique_artists_number * 100, 2)}% complete\r', end='')
+        time.sleep(0.01)
+    print()
+    print("Finish getting artists' ids")
+    return artist_ids
+
+
+def get_artists_data_by_id(sp, artists_ids):
+    print("Start getting artists' info with SpotifyAPI")
+    step = 50
+    artists_ids_list = list(artists_ids)
+    async_results = []
+    with Pool(processes=os.cpu_count() if os.cpu_count() < 4 else 4) as pool:
+        for i in range(0, len(artists_ids_list), step):
+            async_result = pool.apply_async(
+                sp.artists,
+                args=artists_ids_list[i:i+step]
+            )
+            async_results.append(async_result)
 
         for async_result in async_results:
             async_result.wait()
+        print("Finish getting artists' info with SpotifyAPI")
+        final_result = []
+        for async_result in async_results:
+            artists_data = async_result.get()
+            artist_pre_dataframe = []
+            for artist in artists_data['artists']:
+                artist_pre_dataframe.append([
+                    artist['id'],
+                    artist['name'],
+                    artist['genres'],
+                    artist['popularity'],
+                    artist['followers'],
+                ])
 
-    return set().union(*async_results)
+            final_result.extend(artist_pre_dataframe)
+        return final_result
 
 
 def get_all_artists_info(all_unique_artists):
     sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(*get_spotify_credentials()))
-    # Get all artists meta info
-    # return it and create dataframe
-    return []
+    artists_ids = get_artists_ids(sp, all_unique_artists)
+    artists_data = get_artists_data_by_id(sp, artists_ids)
+    headers = ('id', 'name', 'genres', 'popularity', 'followers')
+    return pd.DataFrame(artists_data, columns=headers)
 
 
 def process_audio():
-    all_unique_artists = get_all_unique_artists()
+    all_unique_artists = get_all_unique_artists_from_dataset()
     all_artists_info = get_all_artists_info(all_unique_artists)
-    pd.to_csv(all_artists_info)
+    all_artists_info.to_csv('full_artists_df.csv')
 
 
 @timer
