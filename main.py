@@ -16,31 +16,34 @@ from utils import (
 
 
 def group_process_worker(group_id_, offset_, user_fields_):
-    worker_id = os.getpid()
+    try:
+        worker_id = os.getpid()
 
-    vk_processor_ = VkProcessor(*get_vk_credentials())
-    vk_processor_.set_group_by_id(group_id=group_id_)
+        vk_processor_ = VkProcessor(*get_vk_credentials())
+        vk_processor_.set_group_by_id(group_id=group_id_)
 
-    members_group_info: MembersGroupInfo = vk_processor_.get_members_group_info(offset=offset_)
+        members_group_info: MembersGroupInfo = vk_processor_.get_members_group_info(offset=offset_)
 
-    user_data = []
-    user_ids = members_group_info.user_ids
-    users_info = vk_processor_.get_users_info(user_ids, is_full=True)
+        user_data = []
+        user_ids = members_group_info.user_ids
+        users_info = vk_processor_.get_users_info(user_ids, is_full=True)
 
-    for user_info in users_info:
-        user_list = []
-        for field in user_fields_:
-            if hasattr(user_info, field):
-                user_list.append(getattr(user_info, field))
-            else:
-                user_list.append('nan')
+        for user_info in users_info:
+            user_list = []
+            for field in user_fields_:
+                if hasattr(user_info, field):
+                    user_list.append(getattr(user_info, field))
+                else:
+                    user_list.append('nan')
 
-        user_data.append(user_list)
+            user_data.append(user_list)
 
-    pd.DataFrame(np.array(user_data), columns=user_fields_).to_csv(f'result_data/result_{offset_}_{offset_ + 1000}.csv')
+        pd.DataFrame(np.array(user_data), columns=user_fields_).to_csv(f'result_data/result_{offset_}_{offset_ + 1000}.csv')
 
-    print(f'WORKER_ID={worker_id} - FINISH')
-    return 0
+        print(f'WORKER_ID={worker_id} - FINISH')
+        return 0
+    except Exception as ex:
+        print(f"Unexpected exception: {ex}")
 
 
 def process_group(group_id: str, user_fields: list):
@@ -103,9 +106,19 @@ def get_artists_ids(sp, all_unique_artists):
     return artist_ids
 
 
-def get_artists_data_by_id(sp, artists_ids):
+def save_artists_ids(artists_ids):
+    with open('artists_ids.txt', 'w', encoding='utf-8') as output:
+        for artist_id in artists_ids:
+            output.write(f'{artist_id}\n')
+
+
+def get_artists_data_by_id(sp):
     print("Start getting artists' info with SpotifyAPI")
     step = 50
+
+    with open('artists_ids.txt', encoding='utf-8') as inp:
+        artists_ids = [line[:-1] for line in inp.readlines()]
+
     artists_ids_list = list(artists_ids)
     async_results = []
     with Pool(processes=os.cpu_count() if os.cpu_count() < 4 else 4) as pool:
@@ -139,7 +152,8 @@ def get_artists_data_by_id(sp, artists_ids):
 def get_all_artists_info(all_unique_artists):
     sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(*get_spotify_credentials()))
     artists_ids = get_artists_ids(sp, all_unique_artists)
-    artists_data = get_artists_data_by_id(sp, artists_ids)
+    save_artists_ids(artists_ids)
+    artists_data = get_artists_data_by_id(sp)
     headers = ('id', 'name', 'genres', 'popularity', 'followers')
     return pd.DataFrame(artists_data, columns=headers)
 
